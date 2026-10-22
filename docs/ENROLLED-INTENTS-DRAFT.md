@@ -1,70 +1,87 @@
-# Enrolled Intents — DRAFT for owner approval
+# Enrolled Intents — DRAFT v2 for owner approval
 
-Status: DRAFT — becomes ground truth only when approved by the operator,
-sealed (seal.py) and tagged. Source: the 28 candidates in
-[INTENT-CANDIDATES.md](INTENT-CANDIDATES.md), reduced to 24.
+Status: DRAFT — becomes ground truth only when approved, sealed and
+tagged. v2 after owner feedback on v1: *statements were too
+implementation-technical; intents should be behavior-first*. v1 is in
+git history.
 
-**Dropped (4), with reasons:**
-- *API keys resolved to an app before use* — duplicates the permission
-  intents (INT-002/003); same violation surface.
-- *Full audit trail via events* — too vague for a sealed violating
-  observation; its checkable core is covered by INT-007/INT-008.
-- *Large result sets stream via IAsyncEnumerable* — "large" is a
-  judgment call; not mechanically statable.
-- *Command execution logs start/success/failure* — narrow duplicate of
-  the LoggerMessage intent (INT-022).
+Design shift in v2: each intent is stated as **observable behavior or
+an owner-level architecture commitment** — what must hold — not as a
+code pattern. Code patterns are *projections*: they may appear as the
+check implementation, but the sealed statement and the auditors' ground
+truth live at behavior level. This also lowers the auditor bar: most
+verdicts can be reached by probing a running instance or reading API
+test results instead of reviewing middleware internals.
 
-Importance ratings (H/M/L) are proposed by the operator and frozen at
-seal time; arms are randomized AFTER sealing, stratified by importance
-(8 per arm). Modality is MUST unless marked.
+Mix: 14 behavioral, 7 architectural, 3 process-level. Importance:
+8 H / 12 M / 4 L (stratified randomization at 8 per arm). Modality MUST
+unless marked. Check technology is equal across ARM B and C per intent.
 
-| ID | Intent (statement kernel) | Importance | A violation looks like |
+## Behavioral intents (API-observable)
+
+| ID | Intent | Imp. | A violation looks like |
 |---|---|---|---|
-| INT-001 | Every content/asset repository query is scoped by app id | H | Repository method or Mongo filter querying content/assets without `appId` |
-| INT-002 | Role permissions always carry the `squidex.apps.{app}` prefix; no cross-app grants | H | Permission string built or accepted without the app prefix |
-| INT-003 | Every non-anonymous API action carries `[ApiPermission(...)]` | H | New controller action with neither `[ApiPermission]` nor `[AllowAnonymous]` |
-| INT-004 | The current app is resolved only by `AppResolver` middleware | M | Handler/service resolving the app itself (e.g. direct `IAppProvider` lookup from request data) |
-| INT-005 | `AppId` on commands is set by command middleware, never read from the request body | H | Action/handler copying an app id from the HTTP payload into a command |
-| INT-006 | Aggregate state changes only by raising events | H | Direct mutation of aggregate/snapshot state outside an event apply |
-| INT-007 | The event store is append-only; stored events are never updated or deleted | H | Code issuing delete/update against the events collection |
-| INT-008 | Every event class carries `[EventType]` | M | Event type without the attribute (silent serialization break) |
-| INT-009 | Event and command classes are sealed | L | A non-sealed concrete event/command |
-| INT-010 | Read models are populated only from event subscriptions | M | Command handler writing directly to a read-model collection |
-| INT-011 | Aggregate commands carry `ExpectedVersion` and it is honored | M | Command path executing with version check bypassed |
-| INT-012 | Optimistic-concurrency conflicts surface as HTTP 409 | M | Version mismatch mapped to 400/500 |
-| INT-013 | Guard preconditions (`GuardX.CanY`) run before any aggregate mutation | H | Mutation path with the guard call removed or skipped |
-| INT-014 | Domain validation failures throw `DomainException` with an error code | M | `throw new Exception(...)` (or ArgumentException) on a domain validation path |
-| INT-015 | All API errors leave as ProblemDetails via the exception filter | M | Controller catching and returning a raw 500/string instead of letting the filter map it |
-| INT-016 | Public async methods accept a `CancellationToken ct` | L | New public async method without a ct parameter |
-| INT-017 | `IAsyncEnumerable` methods mark ct with `[EnumeratorCancellation]` | L | Streaming method with an unannotated ct |
-| INT-018 | Domain projects never reference `Data.*` implementations | H | `Data.MongoDb`/`Data.EntityFramework` reference (project or using) in Domain.* |
-| INT-019 | The Web layer never references `Data.*` directly | M | Data.* PackageReference/using in Squidex.Web |
-| INT-020 | Core model projects stay infrastructure-free | M | Core.Model gaining a dependency on infrastructure packages |
-| INT-021 | ASSUME: any read model can be rebuilt by replaying the event log | M | A read model holding state that exists nowhere in events (unrebuildable) |
-| INT-022 | Structured logging goes through `[LoggerMessage]` definitions | L | Ad-hoc `ILogger.LogX("string...")` call added in backend src |
-| INT-023 | StyleCop + Meziantou analyzers stay enabled in the build | M | Analyzer PackageReference removed or globally silenced |
-| INT-024 | Integration tests carry `[Trait("Category", ...)]` so CI filters stay meaningful | L | New container/DB-bound test without a category trait |
+| INT-001 | Tenant isolation: content, assets and settings of one app can never be read or modified using another app's credentials | H | Any request authenticated for app A returning or mutating app B data |
+| INT-002 | Role boundaries hold: a client/user can perform only actions its role grants (e.g. a Reader can never modify content or schemas) | H | A Reader token successfully creating/updating content |
+| INT-003 | No anonymous access to protected resources: endpoints require authentication unless explicitly configured anonymous | H | Unauthenticated request succeeding against a protected endpoint |
+| INT-004 | Unpublished content is never served through the public content API | H | Draft content appearing in an unauthenticated/client content query |
+| INT-005 | Data is never destroyed: deleting content keeps its history recoverable (soft delete; the event record survives) | H | A delete that physically removes events/history |
+| INT-006 | Concurrent conflicting updates never silently lose a write: the later writer receives 409 | M | Second writer getting 200 and overwriting the first write |
+| INT-007 | Content that violates its schema is rejected with a validation error, never stored | H | Invalid field value accepted and persisted |
+| INT-008 | API errors return structured ProblemDetails with error codes — never raw stack traces or bare 500s | M | Endpoint leaking an exception message/stack trace |
+| INT-009 | Every content change is visible in that content's version history | M | An update that leaves no history entry |
+| INT-010 | ASSUME: any read model can be rebuilt by replaying the event log — no state exists outside events | M | A feature storing state that event replay cannot reproduce |
+| INT-011 | A role defined in app X grants nothing in app Y (permissions never cross the app prefix) | M | Cross-app action succeeding via a role from another app |
+| INT-012 | Resources of a deleted app are no longer accessible through the API | M | Requests against a deleted app still serving its data |
+| INT-013 | Rules/webhooks fire for the content events they subscribe to | L | A matching content event producing no rule execution |
+| INT-014 | Content API responses carry ETags and honor If-None-Match for caching | L | Endpoint dropping ETag behavior |
 
-Proposed distribution: 8×H, 10×M, 6×L — supports stratified
-randomization at 8 intents per arm with mixed importance in each.
+## Architectural intents (owner-level structure commitments)
 
-## Check-technology note (equal tech across ARM B and ARM C)
+| ID | Intent | Imp. | A violation looks like |
+|---|---|---|---|
+| INT-015 | The domain layer is storage-agnostic: no Domain project references Data.* implementations | H | Data.MongoDb/EntityFramework reference (project or using) in Domain.* |
+| INT-016 | The web layer never touches storage directly — all data access goes through domain services | M | Data.* reference or direct Mongo query in Squidex.Web |
+| INT-017 | Core model projects stay infrastructure-free | M | Core.Model gaining an infrastructure dependency |
+| INT-018 | Aggregate state changes only by raising events (CQRS discipline) | H | Direct mutation of aggregate/snapshot state outside an event apply |
+| INT-019 | The event store is append-only: no code path updates or deletes stored events | M | Code issuing update/delete against the events collection |
+| INT-020 | The current app is resolved once, by middleware — business logic never resolves it ad hoc | M | Handler/service doing its own app lookup from request data |
+| INT-021 | Repository contracts are app-scoped by signature: no data query API without an app id | M | New repository method querying content/assets without appId |
 
-Most intents bind to one of four checker types, available to both
-check-bearing arms with identical coverage:
-1. **Roslyn/analyzer or grep-style source scan** (INT-003, 008, 009,
-   016, 017, 022, 024, 014)
-2. **Project-reference assertion** on csproj files (INT-018, 019, 020, 023)
-3. **Architecture unit test** compiled against the backend (INT-001,
-   004, 005, 006, 010, 013)
-4. **Behavioral/API test** (INT-002, 007, 011, 012, 015, 021)
+## Process intents (build/test discipline)
+
+| ID | Intent | Imp. | A violation looks like |
+|---|---|---|---|
+| INT-022 | Static analyzers (StyleCop, Meziantou) stay enabled in the build | M | Analyzer PackageReference removed or globally silenced |
+| INT-023 | Every event class is registered for serialization via [EventType] — events must survive versioning | L | New event type without the attribute (silent serialization break) |
+| INT-024 | Integration tests carry [Trait("Category", ...)] so CI filters stay meaningful | L | New container/DB-bound test without a category trait |
+
+## Check technology per intent (equal tech in ARM B and ARM C)
+
+- **API/behavioral tests** (run against instance + Mongo container,
+  reusing tools/TestSuite technology): INT-001…009, 011…014
+- **Event-replay harness**: INT-010
+- **Architecture tests / project-reference assertions**: INT-015…021
+- **Build/source assertions**: INT-022…024
+
+Infrastructure note: behavioral checks require a running Squidex +
+MongoDB (Docker available on the pilot machine; upstream CI does the
+same). Red-proof fixtures for behavioral checks are violation *commits*
+(sealed) whose deployment must turn the check red.
+
+## Dropped from v1 (beyond the four dropped from the candidate list)
+
+Pure code-style intents (sealed classes, ct parameters,
+[EnumeratorCancellation], LoggerMessage pattern, file-scoped
+namespaces) — all were implementation patterns with no behavior or
+owner-commitment content. Replaced by behavioral intents INT-004, 007,
+009, 012, 013, 014.
 
 ## Next steps after approval
 
 1. Owner adjusts/approves statements and importance ratings.
 2. Statements sealed (seal.py) + committed.
 3. Arm randomization: seed fixed in the prereg tag, stratified 8/8/8.
-4. ARM-specific artifacts authored in the fork (prose ADRs / checks /
-   intent records + machinery).
+4. ARM artifacts authored in the fork (thbj/squidex @ 829c2b94).
 5. Sabotage design (9 seeded drifts, 3 per arm, matched in kind),
    sealed as hashes only.
