@@ -75,3 +75,14 @@ so a CI pipeline is just those two calls in sequence.
 2. Everything the harness cannot measure validly in solo mode is
    labeled, not estimated.
 3. Results are published regardless of outcome.
+4. **Ground truth is published as hashes first, plaintext after.** The
+   seeded-drift list and per-intent ground truth stay out of this
+   repository until the measured runs are complete — only their SHA-256
+   digests (`seals.json`) are committed beforehand. Agents under test
+   may have web access; a findable answer key would void the run. After
+   read-out the plaintext is committed and anyone can verify it against
+   the pre-run seals.
+
+## License
+
+MIT — see [LICENSE](LICENSE).
