@@ -1,0 +1,12 @@
+# Deviation ledger (DEVIATION-LEDGER-SPEC.md). Entries narrow an
+# intent's scope, never repeal it. CI reports carved-out scopes as
+# EXCEPTED (never PASS) and goes red when an entry expires.
+deviations:
+  - id: DEV-001
+    intent: INT-001
+    carve_out:
+      - sample/src/Legacy/**
+    reason: Legacy importer talks to the old endpoint directly until the
+      gateway grows an adapter. (Illustrative self-test entry.)
+    owner: bjarke
+    expires: 2027-01-31

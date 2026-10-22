@@ -1,0 +1,8 @@
+# Check registry: every check an intent may reference in enforced_by.
+#   run:       command, exit 0 = check passes on the real tree
+#   red_proof: the same check pointed at a sealed known violation;
+#              it MUST exit non-zero there, or the check is vacuous.
+checks:
+  - id: CHECK-001
+    run: "! grep -rn 'new HttpClient(' sample/src --include=*.cs"
+    red_proof: "! grep -rn 'new HttpClient(' sample/red_proofs/INT-001 --include=*.cs"

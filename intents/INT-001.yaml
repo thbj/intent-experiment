@@ -1,0 +1,11 @@
+id: INT-001
+statement: No code outside sample/src/Gateway may open outgoing network
+  connections; all external calls go through ApiGateway.
+modality: MUST
+scope:
+  - sample/src/**
+rationale: Retry, timeout and logging exist only in ApiGateway. Direct
+  calls bypass them silently. (Illustrative self-test intent.)
+owner: bjarke
+enforced_by:
+  - CHECK-001
