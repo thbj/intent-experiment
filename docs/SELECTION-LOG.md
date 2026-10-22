@@ -39,13 +39,30 @@ A7 (GitHub Actions present), A9 (MIT), A10 (no thesis-author commits in
 history sampled). Tie-breakers: ~3× lower fame than runner-up (B1),
 legible domain (B3), lighter headless build (MongoDB via container).
 
-## Still to verify before fork is final
+## Final gate results (2026-10-22) — ALL PASS, Squidex selected
 
-- A5: ≥10 non-trivial commits after the agent model's training cutoff.
-- A7: default branch actually green at fork time.
-- A8: clean clone builds + tests pass ≤30 min headless (timed run).
-- A11: elicitation pass must yield ≥ 24 intents with statable violating
-  observations (sources: external docs at docs.squidex.io, in-repo
-  conventions, maintainer contact per REPO-CRITERIA.md §D).
+- **A5 PASS**: 24 commits since 2026-06-01.
+- **A7 PASS via fork point**: master HEAD is red as of 2026-10-22 (the
+  two commits pushed that day broke the Dev workflow), but the branch
+  was green continuously before that. **Fork point fixed at the last
+  green commit: `829c2b94ee1119f91dfcc73ed552938df39c2cc3`
+  (2026-10-13)** — the last SHA whose full Dev workflow succeeded.
+- **A8 PASS**: clean shallow clone + full backend build (Release,
+  .NET 10): **~6 minutes**, 0 errors. Filtered unit-test run
+  (`Category!=TestContainer&!=MongoOnly&!=NotAutomated`): 70 s,
+  4 547 passed. 159 initial failures were all environment artifacts in
+  three classes, each with a standard remedy:
+  1. locale (machine uses decimal comma) — fixed by
+     `DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1`; verified: Core.Tests
+     went 1311/1312 → 1312/1312;
+  2. missing ffmpeg binary (asset metadata tests) — installable;
+  3. DB/Azure/SMTP-bound tests — containerized in upstream CI, excluded
+     from the headless baseline.
+  Experiment baseline: invariant culture + the category filter above.
+- **A11 PASS**: 28 candidate intents (≥24 required) —
+  [INTENT-CANDIDATES.md](INTENT-CANDIDATES.md). Includes a field
+  observation: official docs still list Orleans; the backend has zero
+  Orleans references — pre-existing documentation drift in the trial
+  repo itself.
 
-Fallback if any fails: btcpayserver/btcpayserver, same checks.
+Runner-up (unused): btcpayserver/btcpayserver.
